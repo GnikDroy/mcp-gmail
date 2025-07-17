@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -12,9 +10,6 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { OAuth2Client } from "google-auth-library";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import http from "http";
-import open from "open";
 import os from "os";
 import { createEmailMessage, createEmailWithNodemailer } from "./utl.js";
 import {
@@ -22,20 +17,9 @@ import {
   updateLabel,
   deleteLabel,
   listLabels,
-  findLabelByName,
   getOrCreateLabel,
   GmailLabel,
 } from "./label-manager.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Configuration paths
-const CONFIG_DIR = path.join(os.homedir(), ".gmail-mcp");
-const OAUTH_PATH =
-  process.env.GMAIL_OAUTH_PATH || path.join(CONFIG_DIR, "gcp-oauth.keys.json");
-const CREDENTIALS_PATH =
-  process.env.GMAIL_CREDENTIALS_PATH ||
-  path.join(CONFIG_DIR, "credentials.json");
 
 // Type definitions for Gmail API responses
 interface GmailMessagePart {
@@ -66,9 +50,6 @@ interface EmailContent {
   html: string;
 }
 
-// OAuth2 configuration
-let oauth2Client: OAuth2Client;
-
 /**
  * Recursively extract email body content from MIME message parts
  * Handles complex email structures with nested parts
@@ -81,7 +62,7 @@ function extractEmailContent(messagePart: GmailMessagePart): EmailContent {
   // If the part has a body with data, process it based on MIME type
   if (messagePart.body && messagePart.body.data) {
     const content = Buffer.from(messagePart.body.data, "base64").toString(
-      "utf8"
+      "utf8",
     );
 
     // Store content based on its MIME type
@@ -105,18 +86,14 @@ function extractEmailContent(messagePart: GmailMessagePart): EmailContent {
   return { text: textContent, html: htmlContent };
 }
 
-// Schema definitions
-const ConfigureSchema = z.object({
-  access_token: z.string().describe("OAuth2 access token"),
-});
-
 const SendEmailSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   to: z.array(z.string()).describe("List of recipient email addresses"),
   subject: z.string().describe("Email subject"),
   body: z
     .string()
     .describe(
-      "Email body content (used for text/plain or when htmlBody not provided)"
+      "Email body content (used for text/plain or when htmlBody not provided)",
     ),
   htmlBody: z.string().optional().describe("HTML version of the email body"),
   mimeType: z
@@ -135,10 +112,12 @@ const SendEmailSchema = z.object({
 });
 
 const ReadEmailSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   messageId: z.string().describe("ID of the email message to retrieve"),
 });
 
 const SearchEmailsSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   query: z
     .string()
     .describe("Gmail search query (e.g., 'from:example@gmail.com')"),
@@ -150,6 +129,7 @@ const SearchEmailsSchema = z.object({
 
 // Updated schema to include removeLabelIds
 const ModifyEmailSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   messageId: z.string().describe("ID of the email message to modify"),
   labelIds: z
     .array(z.string())
@@ -166,17 +146,21 @@ const ModifyEmailSchema = z.object({
 });
 
 const DeleteEmailSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   messageId: z.string().describe("ID of the email message to delete"),
 });
 
 // New schema for listing email labels
 const ListEmailLabelsSchema = z
-  .object({})
+  .object({
+    access_token: z.string().describe("OAuth2 access token"),
+  })
   .describe("Retrieves all available Gmail labels");
 
 // Label management schemas
 const CreateLabelSchema = z
   .object({
+    access_token: z.string().describe("OAuth2 access token"),
     name: z.string().describe("Name for the new label"),
     messageListVisibility: z
       .enum(["show", "hide"])
@@ -191,6 +175,7 @@ const CreateLabelSchema = z
 
 const UpdateLabelSchema = z
   .object({
+    access_token: z.string().describe("OAuth2 access token"),
     id: z.string().describe("ID of the label to update"),
     name: z.string().optional().describe("New name for the label"),
     messageListVisibility: z
@@ -206,12 +191,14 @@ const UpdateLabelSchema = z
 
 const DeleteLabelSchema = z
   .object({
+    access_token: z.string().describe("OAuth2 access token"),
     id: z.string().describe("ID of the label to delete"),
   })
   .describe("Deletes a Gmail label");
 
 const GetOrCreateLabelSchema = z
   .object({
+    access_token: z.string().describe("OAuth2 access token"),
     name: z.string().describe("Name of the label to get or create"),
     messageListVisibility: z
       .enum(["show", "hide"])
@@ -226,6 +213,7 @@ const GetOrCreateLabelSchema = z
 
 // Schemas for batch operations
 const BatchModifyEmailsSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   messageIds: z.array(z.string()).describe("List of message IDs to modify"),
   addLabelIds: z
     .array(z.string())
@@ -243,6 +231,7 @@ const BatchModifyEmailsSchema = z.object({
 });
 
 const BatchDeleteEmailsSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   messageIds: z.array(z.string()).describe("List of message IDs to delete"),
   batchSize: z
     .number()
@@ -252,6 +241,7 @@ const BatchDeleteEmailsSchema = z.object({
 });
 
 const DownloadAttachmentSchema = z.object({
+  access_token: z.string().describe("OAuth2 access token"),
   messageId: z
     .string()
     .describe("ID of the email message containing the attachment"),
@@ -260,15 +250,23 @@ const DownloadAttachmentSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Filename to save the attachment as (if not provided, uses original filename)"
+      "Filename to save the attachment as (if not provided, uses original filename)",
     ),
   savePath: z
     .string()
     .optional()
     .describe(
-      "Directory path to save the attachment (defaults to current directory)"
+      "Directory path to save the attachment (defaults to current directory)",
     ),
 });
+
+async function get_gmail_sdk(access_token: string) {
+  let oauth2Client: OAuth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: access_token });
+
+  let gmail = google.gmail({ version: "v1", auth: oauth2Client });
+  return gmail;
+}
 
 // Main function
 async function main() {
@@ -276,16 +274,10 @@ async function main() {
     os.homedir(),
     "Documents",
     "dev",
-    "Gmail-MCP-Server"
+    "Gmail-MCP-Server",
   );
   const logPath = path.join(PROJECT_DIR, "server.log");
   fs.appendFileSync(logPath, `[${new Date().toISOString()}] server started\n`);
-
-  oauth2Client = new google.auth.OAuth2();
-  //   oauth2Client.setCredentials({ access_token });
-
-  // Initialize Gmail API
-  let gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
   // Server implementation
   const server = new Server({
@@ -299,12 +291,6 @@ async function main() {
   // Tool handlers
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
-      {
-        name: "configure",
-        description:
-          "Configures the Gmail API with OAuth2 access token. This must always be called first.",
-        inputSchema: zodToJsonSchema(ConfigureSchema),
-      },
       {
         name: "send_email",
         description: "Sends a new email",
@@ -382,30 +368,13 @@ async function main() {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     fs.appendFileSync(
       logPath,
-      `[${new Date().toISOString()}] Request: ${JSON.stringify(request)}\n`
+      `[${new Date().toISOString()}] Request: ${JSON.stringify(request)}\n`,
     );
     const { name, arguments: args } = request.params;
 
-    async function configureOauthClient(validatedArgs: {
-      access_token: string;
-    }) {
-      oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: validatedArgs.access_token });
-      gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Oauth client configured successfully",
-          },
-        ],
-      };
-    }
-
     async function handleEmailAction(
       action: "send" | "draft",
-      validatedArgs: any
+      validatedArgs: any,
     ) {
       let message: string;
 
@@ -422,6 +391,7 @@ async function main() {
               .replace(/\//g, "_")
               .replace(/=+$/, "");
 
+            let gmail = await get_gmail_sdk(validatedArgs.access_token);
             const result = await gmail.users.messages.send({
               userId: "me",
               requestBody: {
@@ -455,6 +425,7 @@ async function main() {
               }),
             };
 
+            let gmail = await get_gmail_sdk(validatedArgs.access_token);
             const response = await gmail.users.drafts.create({
               userId: "me",
               requestBody: {
@@ -496,6 +467,7 @@ async function main() {
           }
 
           if (action === "send") {
+            let gmail = await get_gmail_sdk(validatedArgs.access_token);
             const response = await gmail.users.messages.send({
               userId: "me",
               requestBody: messageRequest,
@@ -509,6 +481,7 @@ async function main() {
               ],
             };
           } else {
+            let gmail = await get_gmail_sdk(validatedArgs.access_token);
             const response = await gmail.users.drafts.create({
               userId: "me",
               requestBody: {
@@ -530,7 +503,7 @@ async function main() {
         if (validatedArgs.attachments && validatedArgs.attachments.length > 0) {
           console.error(
             `Failed to send email with ${validatedArgs.attachments.length} attachments:`,
-            error.message
+            error.message,
           );
         }
         throw error;
@@ -541,7 +514,7 @@ async function main() {
     async function processBatches<T, U>(
       items: T[],
       batchSize: number,
-      processFn: (batch: T[]) => Promise<U[]>
+      processFn: (batch: T[]) => Promise<U[]>,
     ): Promise<{ successes: U[]; failures: { item: T; error: Error }[] }> {
       const successes: U[] = [];
       const failures: { item: T; error: Error }[] = [];
@@ -570,10 +543,6 @@ async function main() {
 
     try {
       switch (name) {
-        case "configure": {
-          const validatedArgs = ConfigureSchema.parse(args);
-          return await configureOauthClient(validatedArgs);
-        }
         case "send_email":
         case "draft_email": {
           const validatedArgs = SendEmailSchema.parse(args);
@@ -583,6 +552,7 @@ async function main() {
 
         case "read_email": {
           const validatedArgs = ReadEmailSchema.parse(args);
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           const response = await gmail.users.messages.get({
             userId: "me",
             id: validatedArgs.messageId,
@@ -603,7 +573,7 @@ async function main() {
 
           // Extract email content using the recursive function
           const { text, html } = extractEmailContent(
-            (response.data.payload as GmailMessagePart) || {}
+            (response.data.payload as GmailMessagePart) || {},
           );
 
           // Use plain text content if available, otherwise use HTML content
@@ -620,7 +590,7 @@ async function main() {
           const attachments: EmailAttachment[] = [];
           const processAttachmentParts = (
             part: GmailMessagePart,
-            path: string = ""
+            path: string = "",
           ) => {
             if (part.body && part.body.attachmentId) {
               const filename =
@@ -635,7 +605,7 @@ async function main() {
 
             if (part.parts) {
               part.parts.forEach((subpart: GmailMessagePart) =>
-                processAttachmentParts(subpart, `${path}/parts`)
+                processAttachmentParts(subpart, `${path}/parts`),
               );
             }
           };
@@ -652,8 +622,8 @@ async function main() {
                   .map(
                     (a) =>
                       `- ${a.filename} (${a.mimeType}, ${Math.round(
-                        a.size / 1024
-                      )} KB, ID: ${a.id})`
+                        a.size / 1024,
+                      )} KB, ID: ${a.id})`,
                   )
                   .join("\n")
               : "";
@@ -670,6 +640,7 @@ async function main() {
 
         case "search_emails": {
           const validatedArgs = SearchEmailsSchema.parse(args);
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           const response = await gmail.users.messages.list({
             userId: "me",
             q: validatedArgs.query,
@@ -679,8 +650,8 @@ async function main() {
           fs.appendFileSync(
             logPath,
             `[${new Date().toISOString()}] Emails: ${JSON.stringify(
-              response
-            )}\n`
+              response,
+            )}\n`,
           );
 
           const messages = response.data.messages || [];
@@ -699,7 +670,7 @@ async function main() {
                 from: headers.find((h) => h.name === "From")?.value || "",
                 date: headers.find((h) => h.name === "Date")?.value || "",
               };
-            })
+            }),
           );
 
           return {
@@ -709,7 +680,7 @@ async function main() {
                 text: results
                   .map(
                     (r) =>
-                      `ID: ${r.id}\nSubject: ${r.subject}\nFrom: ${r.from}\nDate: ${r.date}\n`
+                      `ID: ${r.id}\nSubject: ${r.subject}\nFrom: ${r.from}\nDate: ${r.date}\n`,
                   )
                   .join("\n"),
               },
@@ -736,6 +707,7 @@ async function main() {
             requestBody.removeLabelIds = validatedArgs.removeLabelIds;
           }
 
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           await gmail.users.messages.modify({
             userId: "me",
             id: validatedArgs.messageId,
@@ -754,6 +726,7 @@ async function main() {
 
         case "delete_email": {
           const validatedArgs = DeleteEmailSchema.parse(args);
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           await gmail.users.messages.delete({
             userId: "me",
             id: validatedArgs.messageId,
@@ -770,6 +743,9 @@ async function main() {
         }
 
         case "list_email_labels": {
+          const validatedArgs = ListEmailLabelsSchema.parse(args);
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
+
           const labelResults = await listLabels(gmail);
           const systemLabels = labelResults.system;
           const userLabels = labelResults.user;
@@ -816,16 +792,17 @@ async function main() {
             async (batch) => {
               const results = await Promise.all(
                 batch.map(async (messageId) => {
+                  const gmail = await get_gmail_sdk(validatedArgs.access_token);
                   const result = await gmail.users.messages.modify({
                     userId: "me",
                     id: messageId,
                     requestBody: requestBody,
                   });
                   return { messageId, success: true };
-                })
+                }),
               );
               return results;
-            }
+            },
           );
 
           // Generate summary of the operation
@@ -843,7 +820,7 @@ async function main() {
                 (f) =>
                   `- ${(f.item as string).substring(0, 16)}... (${
                     f.error.message
-                  })`
+                  })`,
               )
               .join("\n");
           }
@@ -870,15 +847,16 @@ async function main() {
             async (batch) => {
               const results = await Promise.all(
                 batch.map(async (messageId) => {
+                  const gmail = await get_gmail_sdk(validatedArgs.access_token);
                   await gmail.users.messages.delete({
                     userId: "me",
                     id: messageId,
                   });
                   return { messageId, success: true };
-                })
+                }),
               );
               return results;
-            }
+            },
           );
 
           // Generate summary of the operation
@@ -896,7 +874,7 @@ async function main() {
                 (f) =>
                   `- ${(f.item as string).substring(0, 16)}... (${
                     f.error.message
-                  })`
+                  })`,
               )
               .join("\n");
           }
@@ -914,6 +892,7 @@ async function main() {
         // New label management handlers
         case "create_label": {
           const validatedArgs = CreateLabelSchema.parse(args);
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           const result = await createLabel(gmail, validatedArgs.name, {
             messageListVisibility: validatedArgs.messageListVisibility,
             labelListVisibility: validatedArgs.labelListVisibility,
@@ -940,6 +919,7 @@ async function main() {
           if (validatedArgs.labelListVisibility)
             updates.labelListVisibility = validatedArgs.labelListVisibility;
 
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           const result = await updateLabel(gmail, validatedArgs.id, updates);
 
           return {
@@ -954,6 +934,7 @@ async function main() {
 
         case "delete_label": {
           const validatedArgs = DeleteLabelSchema.parse(args);
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           const result = await deleteLabel(gmail, validatedArgs.id);
 
           return {
@@ -968,6 +949,7 @@ async function main() {
 
         case "get_or_create_label": {
           const validatedArgs = GetOrCreateLabelSchema.parse(args);
+          const gmail = await get_gmail_sdk(validatedArgs.access_token);
           const result = await getOrCreateLabel(gmail, validatedArgs.name, {
             messageListVisibility: validatedArgs.messageListVisibility,
             labelListVisibility: validatedArgs.labelListVisibility,
@@ -992,6 +974,7 @@ async function main() {
           const validatedArgs = DownloadAttachmentSchema.parse(args);
 
           try {
+            const gmail = await get_gmail_sdk(validatedArgs.access_token);
             // Get the attachment data from Gmail API
             const attachmentResponse =
               await gmail.users.messages.attachments.get({
@@ -1014,6 +997,7 @@ async function main() {
 
             if (!filename) {
               // Get original filename from message if not provided
+              const gmail = await get_gmail_sdk(validatedArgs.access_token);
               const messageResponse = await gmail.users.messages.get({
                 userId: "me",
                 id: validatedArgs.messageId,
