@@ -1,13 +1,13 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-import { emailSend, schema as SendEmailSchema } from "./email_send";
-import { emailDraft, schema as DraftEmailSchema } from "./email_draft";
-import { emailGet, schema as ReadEmailSchema } from "./email_get";
-import { emailList, schema as ListEmailsSchema } from "./email_list";
+import { emailSend, schema as SendEmailSchema } from "./email_send.js";
+import { emailDraft, schema as DraftEmailSchema } from "./email_draft.js";
+import { emailGet, schema as ReadEmailSchema } from "./email_get.js";
+import { emailList, schema as ListEmailsSchema } from "./email_list.js";
 import {
   schema as DownloadAttachmentSchema,
   emailAttachmentDownload,
-} from "./email_attachment_download";
+} from "./email_attachment_download.js";
 
 export let tools = [
   {

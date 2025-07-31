@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { extractEmailContent, get_gmail_sdk } from "../utils";
+import { extractEmailContent, get_gmail_sdk } from "../utils.js";
 
 export const schema = z.object({
   access_token: z.string().describe("OAuth2 access token"),
@@ -93,10 +93,17 @@ export async function emailGet(args: any) {
       : "";
 
   return {
+    structuredContent: response.data,
     content: [
+      // OpenAI agents SDK doesn't yet support structured content directly,
+      // so we return as serialized JSON. (Out of official spec for now)
+      // {
+      //   type: "text",
+      //   text: `Thread ID: ${threadId}\nSubject: ${subject}\nFrom: ${from}\nTo: ${to}\nDate: ${date}\n\n${contentTypeNote}${body}${attachmentInfo}`,
+      // },
       {
         type: "text",
-        text: `Thread ID: ${threadId}\nSubject: ${subject}\nFrom: ${from}\nTo: ${to}\nDate: ${date}\n\n${contentTypeNote}${body}${attachmentInfo}`,
+        text: JSON.stringify(response.data),
       },
     ],
   };

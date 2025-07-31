@@ -4,12 +4,11 @@ import path from "path";
 import { google } from "googleapis";
 import { OAuth2Client } from "google-auth-library";
 import nodemailer from "nodemailer";
+import { fileURLToPath } from "url";
 
 export function log(msg: string) {
-  const logPath = path.join(
-    path.dirname(new URL(import.meta.url).pathname),
-    "server.log"
-  );
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const logPath = path.resolve(dir, "server.log");
   fs.appendFileSync(logPath, msg);
 }
 

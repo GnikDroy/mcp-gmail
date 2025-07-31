@@ -4,7 +4,7 @@ import {
   createEmailWithNodemailer,
   encodeEmail,
   get_gmail_sdk,
-} from "../utils";
+} from "../utils.js";
 
 export const schema = z.object({
   access_token: z.string().describe("OAuth2 access token"),

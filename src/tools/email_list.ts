@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { get_gmail_sdk } from "../utils";
+import { get_gmail_sdk } from "../utils.js";
+import { log } from "console";
 
 export const schema = z.object({
   access_token: z.string().describe("OAuth2 access token"),
@@ -26,13 +27,15 @@ export async function emailList(args: unknown) {
     throw new Error(`Failed to retrieve emails: ${response.statusText}`);
   }
 
-  const messages = response.data.messages ?? [];
+  const data = response.data;
 
   return {
-    structuredContent: messages,
-    content: {
-      type: "text",
-      text: JSON.stringify(messages),
-    },
+    structuredContent: data,
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(data),
+      },
+    ],
   };
 }

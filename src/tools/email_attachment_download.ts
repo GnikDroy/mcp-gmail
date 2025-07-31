@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { get_gmail_sdk } from "../utils";
+import { get_gmail_sdk } from "../utils.js";
 
 export const schema = z.object({
   access_token: z.string().describe("OAuth2 access token"),
